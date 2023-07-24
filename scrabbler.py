@@ -3,6 +3,7 @@ import random
 from collections import Counter
 import more_itertools
 import os
+import re
 
 class Player():
     def __init__(self, isBot):
@@ -104,12 +105,14 @@ class Scrabbler():
 
     def loadDictionary(self, filename):
         self.dictionary = set()
+        self.regexDictionary = []
         self.spellingDictionary = []
         __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
         with open(os.path.join(__location__, filename), mode='r', encoding="utf-8") as file:
             lines = file.readlines()
             for line in lines:
                 self.dictionary.add(''.join(line.split()))
+                self.regexDictionary.append(line.rstrip('\n'))
                 self.spellingDictionary.append(line.split())
     
     def loadLetterPoints(self, filename):
@@ -159,8 +162,25 @@ class Scrabbler():
     def maxLength(letters):
         return sum([len(letter)*count for letter, count in letters.items()])
 
+    def findValidWordsRegex(self, letterset, n=10):
+        letters = Counter(letterset)
+        expression = '^'
+        for letter in letters:
+            expression += '(?!(.* '+letter+' .*){'+str(letters[letter]+1)+'})'
+            for character in letter:
+                if character not in letters.keys():
+                    expression += '(?!.* '+character+' .*)'
+            if len(letter)>1:
+                if letter[::-1] not in letters.keys():
+                    expression += '(?!.* '+letter[::-1]+' .*)'
+        expression += '[ '+''.join(letters.keys())+']*$'
+        print(expression)
+
+        reg = re.compile('{}'.format(expression))
+        return sorted([word.split() for word in filter(reg.search, s.regexDictionary)], key=self.wordPoints, reverse=True)[:n]
+    
     def findValidWords(self, letterset, n=10):
-        return sorted([word for word in self.spellingDictionary if Counter(word)<=letterset], key=self.wordPoints, reverse=True)[:10]
+        return sorted([word for word in self.spellingDictionary if Counter(word)<=letterset], key=self.wordPoints, reverse=True)[:n]
 
     def wordPoints(self, letters):
         return sum([self.letterPoints[letter] for letter in letters]) + 50*(len(letters) >= 7)
@@ -185,7 +205,7 @@ class Scrabbler():
 
 #end of class
 
-random.seed(0)
+random.seed(8)
 
 s = Scrabbler()
 
@@ -193,12 +213,12 @@ s.addPlayer(Player(True))
 for player in s.players:
 
     #Set hand manually:
-    #player.hand=Counter("ny e r s k s t".split())
-    #for letter in player.hand:
-    #    for i in range(player.hand[letter]):
-    #        s.bag.remove(letter)
+    player.hand=Counter("s zs sz e e d z é".split())
+    for letter in player.hand:
+        for i in range(player.hand[letter]):
+            s.bag.remove(letter)
 
-    player.hand += s.bag.draw(7)
+    #player.hand += s.bag.draw(7)
 
 player = random.choice(s.players)
 if player.isBot:
@@ -206,6 +226,9 @@ if player.isBot:
     print(player.hand)
     print("Highest scoring valid words:")
     for word in s.findValidWords(player.hand):
+        print(s.wordPoints(word),' - ',word)
+    print("Same but with regex:")
+    for word in s.findValidWordsRegex(player.hand):
         print(s.wordPoints(word),' - ',word)
     print("Highest chance to ace with following words (max 2 difference):")   
     for word in s.findPossibleWords(player.hand, 7, 2):
@@ -217,10 +240,10 @@ if player.isBot:
 
     s.playWord(player, player.startingMove())
 print("Board after starting move:")
-s.board.draw()
+#s.board.draw()
 print("New hand:")
 print(player.hand)
 
-print("Top 10 most probable words for each length")
-for length in range(2,10):
-    print(s.top(length))
+#print("Top 10 most probable words for each length")
+#for length in range(2,10):
+#    print(s.top(length))
